@@ -1,0 +1,6 @@
+sub r1, r2 => r3
+add r1, r2 => r3
+mult r1, r2 => r3
+nop
+loadI 123124 => r3
+store r1 => r3
