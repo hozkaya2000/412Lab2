@@ -24,7 +24,7 @@ public class IRRenamer {
     //         7         8        9    10    11        12
 
     /**
-     * Creates the IR Renamer
+     * Creates the IRRenamer
      * @param iRep the given intermediate representation
      */
     public IRRenamer(LinkedList<Integer[]> iRep, int maxRegNumber) {
@@ -33,15 +33,15 @@ public class IRRenamer {
     }
 
     /**
-     * The renaming algorithm
+     * The renaming algorithm. Adds vr slots to the operation arrays as well as Next Use info
      */
     public void Rename() {
 
         int VRName = 0;
 
-        Integer[] SRToVR = new Integer[iRep.size()];
-        Integer[] LU = new Integer[iRep.size()];
-        for (int i = 0; i < this.maxRegNumber; i ++) {
+        Integer[] SRToVR = new Integer[this.maxRegNumber + 1];
+        Integer[] LU = new Integer[this.maxRegNumber + 1];
+        for (int i = 0; i < this.maxRegNumber + 1; i ++) {
             SRToVR[i] = -1;
             LU[i] = Integer.MAX_VALUE;
         }
@@ -50,7 +50,6 @@ public class IRRenamer {
         int index = this.iRep.size();
         while (IRReverseIterator.hasNext()) {
             Integer[] nextOP = IRReverseIterator.next();
-            //this.ShowRep(nextOP);
 
 
             /*
@@ -94,29 +93,30 @@ public class IRRenamer {
 
             index --;
         }
-
-        this.printRenamedBlock();
-
     }
 
 
     /**
-     * Prints out the sr representation of an op line
+     * Prints out the representation of an op line
+     * @param op the operation array
      */
-    private void ShowRep(Integer[] rep) {
-        System.out.print(" " + this.opCodeStrings[rep[0]]);
+    private void ShowRep(Integer[] op) {
+        System.out.print(" " + this.opCodeStrings[op[0]]);
         for (int i = 1; i < 13; i++) {
             if ((i - 1) % 4 == 0)
                 System.out.print(" | ");
-            if (rep[i] != null)
-                System.out.print(" " + rep[i]);
+            if (op[i] != null)
+                System.out.print(" " + op[i]);
             else
                 System.out.print(" - ");
         }
         System.out.println();
     }
 
-    private void printRenamedBlock() {
+    /**
+     * This prints the renamed ILOC block to stdout
+     */
+    public void PrintRenamedBlock() {
         for (Integer[] operation: this.iRep) {
             this.PrintRenamedOperation(operation);
         }

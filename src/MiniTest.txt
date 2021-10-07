@@ -9,3 +9,5 @@ add r1, r3 => r1
 store r1 => r0
 nop
 output 12312
+add r23, r123 => r122
+add r23, r123 => r12

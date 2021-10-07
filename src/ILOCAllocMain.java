@@ -17,6 +17,7 @@ public class ILOCAllocMain {
 //        parser2.Parse();
         IRRenamer renamer = new IRRenamer(parser.ParseGetIRep(), parser.getMaxSRNum());
         renamer.Rename();
+        renamer.PrintRenamedBlock();
         int filePathInd = 1;
         if (inArgs("-h", args)) {
             showCommandLineInfo();
@@ -28,7 +29,8 @@ public class ILOCAllocMain {
             filePath = args[1];
             parser = new ILOCParser(filePath, false, false);
             renamer = new IRRenamer(parser.ParseGetIRep(), parser.getMaxSRNum());
-
+            renamer.Rename();
+            renamer.PrintRenamedBlock();
         }
 
     }
