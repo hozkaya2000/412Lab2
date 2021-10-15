@@ -1,7 +1,5 @@
-import java.io.File;
 import java.util.Iterator;
 import java.util.LinkedList;
-import java.util.List;
 
 /**
  * This class renames a given intermediate representation
@@ -11,12 +9,17 @@ public class IRRenamer {
     /**
      * The intermediate representation to rename
      */
-    LinkedList<Integer[]> iRep;
+    private LinkedList<Integer[]> iRep;
 
     /**
      * The maximum register number int he IRep
      */
-    int maxRegNumber;
+    private int maxRegNumber;
+
+    /**
+     * The maximum virtual register number
+     */
+    private int maxVRegNum;
 
     //                                      0        1        2       3      4      5        6
     String[] opCodeStrings = new String[]{"load", "loadI", "store", "add", "sub", "mult", "lshift",
@@ -75,9 +78,9 @@ public class IRRenamer {
                 LU[SR] = Integer.MAX_VALUE;
             }
 
-            int lastOPUseInd = nextOP[0] == 2 ? 10 : 6;
+            int lastOPUseInd = nextOP[0] == 2 ? 10 : 6; // if it is a store, the last use register is
             for (int opBaseInd = 1; opBaseInd < lastOPUseInd; opBaseInd += 4) { // for each operand USED in nextOP
-                if (nextOP[opBaseInd] != null && nextOP[0] != 1 && nextOP[0] < 8) { // make sure we're taking use registers
+                if (nextOP[opBaseInd] != null && nextOP[0] != 1 && nextOP[0] < 8) { // only use registers
 
                     int opSR = nextOP[opBaseInd]; // the source register of the current operand
 
@@ -91,8 +94,11 @@ public class IRRenamer {
             }
             // for every operand used in nextOP
 
+
             index --;
         }
+        maxVRegNum = VRName;
+        System.out.println(maxVRegNum);
     }
 
 
@@ -111,6 +117,15 @@ public class IRRenamer {
                 System.out.print(" - ");
         }
         System.out.println();
+    }
+
+    /**
+     * Shows the entire representation of
+     */
+    public void ShowAllRep() {
+        for (Integer[] operation: this.iRep) {
+            this.ShowRep(operation);
+        }
     }
 
     /**
@@ -138,6 +153,10 @@ public class IRRenamer {
         } else if (op[0] == 9) { // nop
             System.out.println(opCodeStrings[op[0]]);
         }
+    }
+
+    public int getMaxVRegNum() {
+        return this.maxVRegNum;
     }
 
 }

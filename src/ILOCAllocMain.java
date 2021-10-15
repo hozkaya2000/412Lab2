@@ -1,3 +1,4 @@
+import java.util.LinkedList;
 
 public class ILOCAllocMain {
 
@@ -10,14 +11,10 @@ public class ILOCAllocMain {
 
 
 
-        // process the args and run
-        String filePath = "C:\\Users\\silen\\IdeaProjects\\412Lab2\\src\\MiniTest.txt";
-        ILOCParser parser = new ILOCParser(filePath, false, false);
-//        ILOCParser parser2 = new ILOCParser(filePath, false, true);
-//        parser2.Parse();
-        IRRenamer renamer = new IRRenamer(parser.ParseGetIRep(), parser.getMaxSRNum());
-        renamer.Rename();
-        renamer.PrintRenamedBlock();
+        String filePath;
+        ILOCParser parser;
+        IRRenamer renamer;
+        RAllocator allocator;
         int filePathInd = 1;
         if (inArgs("-h", args)) {
             showCommandLineInfo();
@@ -31,6 +28,19 @@ public class ILOCAllocMain {
             renamer = new IRRenamer(parser.ParseGetIRep(), parser.getMaxSRNum());
             renamer.Rename();
             renamer.PrintRenamedBlock();
+        }
+        else {
+            filePath = args[1];
+            parser = new ILOCParser(filePath, false, false);
+            LinkedList<Integer[]> iRep = parser.ParseGetIRep(); // parse and get the intermediate representation
+            renamer = new IRRenamer(iRep, parser.getMaxSRNum());
+            renamer.Rename(); // this will add VRs to iRep
+            //renamer.ShowAllRep();
+            //renamer.PrintRenamedBlock();
+            allocator = new RAllocator(iRep, Integer.parseInt(args[0]), renamer.getMaxVRegNum());
+            allocator.Allocate();
+            allocator.ShowAllRep();
+            allocator.PrintRenamedBlock();
         }
 
     }
