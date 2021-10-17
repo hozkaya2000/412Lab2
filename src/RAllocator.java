@@ -1,6 +1,4 @@
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Sets the physical register
@@ -15,6 +13,7 @@ public class RAllocator {
 
     Integer[] VRToPR;
     Integer[] PRToVR;
+    Stack<Integer> PRStack;
     Integer[] VRToSpillLoc;
     Integer[] PRNU;
 
@@ -27,24 +26,29 @@ public class RAllocator {
 
     IntRepList iRepBetter;
 
+    Stack<Integer> prsToFree;
+
 
     int numPhysRegs;
     /**
      * Creates the allocator class with the given iRep
      * @param iRep the intermediate representation
      * @param numPhysRegs the number of physical registers available
-     * @param minRegsForNoSpill the maximum virtual register number that occurs
+     * @param maxVRNum the maximum virtual register number that occurs
      */
-    public RAllocator (LinkedList<Integer[]> iRep, int numPhysRegs, int minRegsForNoSpill) {
+    public RAllocator (LinkedList<Integer[]> iRep, int numPhysRegs, int maxVRNum) {
         this.iRep = iRep;
         this.iRepBetter = new IntRepList();
         this.iRepBetter.transferLinkedList(iRep);
         this.numPhysRegs = numPhysRegs;
-        VRToPR = getNegArray(minRegsForNoSpill);
-        PRToVR = getNegArray(numPhysRegs);
-        VRToSpillLoc = getNegArray(minRegsForNoSpill);
+        VRToPR = getNegArray(maxVRNum);
+        PRToVR = getNegArray(numPhysRegs); // note that the last register is reserved for spilling
+        VRToSpillLoc = getNegArray(maxVRNum);
         PRNU = getNegArray(numPhysRegs);
-        nextSpillLoc = 32764;
+        nextSpillLoc = 32764; // a number to keep track of the memory location to which to spill
+        this.PRStack = new Stack<>(); //
+        this.fillPRStack();
+        prsToFree = new Stack<>();
     }
 
     public void Allocate() {
@@ -75,156 +79,167 @@ public class RAllocator {
             for (int opBaseInd = 1; opBaseInd < lastOPUseInd; opBaseInd += 4) { // for each operand USED in nextOP
                 if (thisOP[opBaseInd] != null && thisOP[0] != 1 && thisOP[0] < 8) { // only use registers
 
-                    int vrNum = thisOP[opBaseInd + 1];
-                    if (isSpilled(vrNum)) {
-                        addRestoreNodes(current, vrNum, opBaseInd);
-                        System.out.println("hi");
+                    int VRInd = opBaseInd + 1;
+                    int PRInd = opBaseInd + 2;
+                    int NUInd = opBaseInd + 3;
+
+                    int PRNum;
+                    int VRNum = thisOP[VRInd];
+                    if (VRToSpillLoc[VRNum] != -1) //checks if spilled
+                        PRNum = Restore(VRNum, current); // restores it
+                    else if (VRToPR[VRNum] != -1){ // if the vr already has a pr assigned
+                        PRNum = VRToPR[VRNum];
                     }
-                    if (-1 == VRToPR[vrNum] && VRToPR[vrNum] != -1) { // checks if operand has a pr in the VRtoPR map
-                        int nextFreePR = getNextFreePR();
-                        //TODO: what if the nextFReePR is not -1?
-                        if (nextFreePR != -1) {
-                            VRToPR[vrNum] = nextFreePR; //
-                            PRToVR[nextFreePR] = vrNum; //
-                            PRNU[nextFreePR] = thisOP[opBaseInd + 3]; // store the next use in the PRNU map
-                            thisOP[opBaseInd + 2] = nextFreePR; // set the PR in the IR to the value found
-                        }
-                        else { // spill the pr with the furthest use
-                            addSpillNodes(current);
-                            System.out.println("Hello there");
-
-                        }
+                    else {
+                        PRNum = this.getPR(current);
+                        VRToPR[VRNum] = PRNum;
+                        PRToVR[PRNum] = VRNum;
                     }
-                    else if (VRToPR[vrNum] != -1) {
-                        thisOP[opBaseInd + 2] = VRToPR[vrNum]; // set the PR in the IR to the value it should be
-                        PRNU[VRToPR[vrNum]] = thisOP[opBaseInd + 3]; // store the next use in the PRNU map
-                    }
-
-
-                }
-            }
-
-            // for each operand USED in nextOP
-            for (int opBaseInd = 1; opBaseInd < lastOPUseInd; opBaseInd += 4) { // for each operand USED in nextOP
-                if (thisOP[opBaseInd] != null && thisOP[0] != 1 && thisOP[0] < 8) { // only use registers
-
-                    int vrNum = thisOP[opBaseInd + 1];
-                    int NU = thisOP[opBaseInd + 3];
-                    if (NU == Integer.MAX_VALUE && VRToPR[vrNum] != -1) { // if this is the last use of virtual reg,
-                        PRNU[VRToPR[vrNum]] = -1;
-                        PRToVR[VRToPR[vrNum]] = -1; // free the pr
-                        VRToPR[vrNum] = -1; // free the vr
+                    thisOP[PRInd] = PRNum;
+                    PRNU[PRNum] = thisOP[NUInd];
+                    if (null == thisOP[NUInd] || thisOP[NUInd] <= 0) {
+                        this.prsToFree.push(VRNum);
                     }
 
                 }
             }
+
+            this.FreePRs();
 
             // for every operand DEFINED in nextOP
             // only do this if the OP is not output, nop, or store
             if (thisOP[0] != 2 && thisOP[0] < 8) {
-                int oBaseInd = 9; // operand base index for any definition is 9
-                int vrNum = thisOP[oBaseInd + 1];
-                int freePR = getNextFreePR();
-                if (freePR == -1) {
-                    addSpillNodes(current);
-                }
-                vrNum = thisOP[oBaseInd + 1];
-                freePR = getNextFreePR();
-                if (freePR != -1) {
-                    VRToPR[vrNum] = freePR;
-                    PRToVR[freePR] = vrNum;
-                    PRNU[freePR] = thisOP[oBaseInd + 3];
-                    thisOP[oBaseInd + 2] = freePR;
+                int opBaseInd = 9; // operand base index for any definition is 9
+                int VRInd = opBaseInd + 1;
+                int PRInd = opBaseInd + 2;
+                int NUInd = opBaseInd + 3;
+                thisOP[PRInd] = this.getPR(current);
+                PRToVR[thisOP[PRInd]] = thisOP[VRInd];
+                VRToPR[thisOP[VRInd]] = thisOP[PRInd];
+                PRNU[thisOP[PRInd]] = thisOP[NUInd];
+                if (thisOP[NUInd] == null || thisOP[NUInd] <= 0) {
+                    this.prsToFree.push(thisOP[VRInd]);
+                    this.FreePRs();
                 }
             }
-
+            this.ShowRep(thisOP);
             current = current.next;
         }
 
     }
 
-
-    private void addSpillNodes(IntRepList.OpNode current) {
-        Integer[] thisOP = current.opArray;
-        int prToSpill = getPRFurthestUse();
-        int vrToSpill = PRToVR[prToSpill];
-        PRToVR[prToSpill] = -1; // free the register
-
-        Integer[] loadMemory = new Integer[13];
-        loadMemory[0] = 1;
-        loadMemory[1] = this.nextSpillLoc += 4; // set the memory spill location
-        VRToSpillLoc[vrToSpill] = loadMemory[1];
-        loadMemory[11] = PRToVR.length - 1;
-        loadMemory[12] = thisOP[12];
-
-        IntRepList.OpNode loadOpNode = new IntRepList.OpNode(loadMemory);
-
-        Integer[] storeOPToInsert = new Integer[13];
-        storeOPToInsert[0] = 2; // store operation
-        storeOPToInsert[2] = vrToSpill; // put the vr in there
-        storeOPToInsert[3] = prToSpill;
-        storeOPToInsert[11] = PRToVR.length - 1; // store the current register value in memory
-        storeOPToInsert[12] = Integer.MAX_VALUE;
-
-        IntRepList.OpNode storeOpNode = new IntRepList.OpNode(storeOPToInsert);
-
-        // manage node connection
-
-        loadOpNode.prev = current.prev;
-        current.prev.next = loadOpNode;
-        storeOpNode.prev = loadOpNode;
-        loadOpNode.next = storeOpNode;
-        storeOpNode.next = current;
-        current.prev = storeOpNode;
-    }
-
-    private void addRestoreNodes(IntRepList.OpNode current, int vrNum, int opBaseInd) {
-        Integer[] thisOP = current.opArray;
-
-        int memoryLocToPull = VRToSpillLoc[vrNum];
-        VRToSpillLoc[vrNum] = -1;
-        int nextFreePR = getNextFreePR();
-        VRToPR[vrNum] = nextFreePR;
-
-        Integer[] loadIOpArray = new Integer[13];
-        loadIOpArray[0] = 1;
-        loadIOpArray[1] = memoryLocToPull; // set the memory spill location
-        loadIOpArray[11] = PRToVR.length - 1; // special register for restoration
-
-        IntRepList.OpNode loadINode = new IntRepList.OpNode(loadIOpArray);
-
-        Integer[] loadOpArray = new Integer[13];
-        loadOpArray[0] = 0; // load operation
-        loadOpArray[3] = PRToVR.length - 1; // pull from special register
-        loadOpArray[10] = vrNum;
-        loadOpArray[11] = nextFreePR; // the register we're trying to restore
-
-        IntRepList.OpNode loadNode = new IntRepList.OpNode(loadOpArray);
-
-        // manage node connection
-
-        loadINode.prev = current.prev;
-        current.prev.next = loadINode;
-        loadNode.prev = loadINode;
-        loadINode.next = loadNode;
-        loadNode.next = current;
-        current.prev = loadNode;
-    }
-
-
-                     /**
-     * Gets the index of the next physical register which is not empty
-     * @return the first non used physical register at the moment
+    /**
+     * Frees the stack of vrs bound to prs and vice versa accumulated at
+     * uses processing
      */
-    private int getNextFreePR() {
-        for (int i = 0; i < PRToVR.length - 1; i++) { // last PR reserved
-            if (PRToVR[i] == -1) { // a -1 in the value of the PRToVR map = non used phys reg
-                return i;
-            }
-        }
-        return -1; // no free physical register
+    private void FreePRs() {
+        if (prsToFree.empty())
+            return;
+
+        int VRNum = prsToFree.pop();
+        PRToVR[VRToPR[VRNum]] = -1;
+        PRStack.push(VRToPR[VRNum]);
+        VRToPR[VRNum] = -1;
     }
 
+
+
+    /**
+     * Inserts the given node before the given current node
+     * @param node the node to insert
+     * @param current the node we're trying to insert behind
+     */
+    private void InsertAt(IntRepList.OpNode node, IntRepList.OpNode current) {
+        current.prev.next = node;
+        node.prev = current.prev;
+        node.next = current;
+    }
+
+    /**
+     * Fills the pr stack with available PRs
+     */
+    private void fillPRStack() {
+        for (int i = 0; i < PRToVR.length - 1; i++) {
+            PRStack.push(i);
+        }
+    }
+
+    /**
+     * Gets the next available pr
+     * @return the pr value
+     */
+    private int getPR(IntRepList.OpNode current) {
+        if (PRStack.empty())
+            return this.Spill(current);
+        return PRStack.pop();
+    }
+
+    private int Spill(IntRepList.OpNode current) {
+
+        Integer[] loadIOPArray = new Integer[13];
+        loadIOPArray[0] = 1; // 'loadI' opcode
+        loadIOPArray[1] = nextSpillLoc += 4; // set the memory spill location
+        loadIOPArray[11] = this.numPhysRegs - 1; // the reserved PR for spill purposes
+        IntRepList.OpNode loadINode = new IntRepList.OpNode(loadIOPArray);
+        InsertAt(loadINode, current);
+
+        int PR = getPRFurthestUse();
+        int VR = PRToVR[PR];
+
+        Integer[] storeOPArray = new Integer[13];
+        storeOPArray[0] = 2; // 'store' opcode
+        storeOPArray[3] = PR; // set the memory spill location
+        storeOPArray[11] = this.numPhysRegs - 1; // the reserved PR for spill purposes
+        IntRepList.OpNode storeNode = new IntRepList.OpNode(storeOPArray);
+        InsertAt(storeNode, current);
+
+        VRToSpillLoc[VR] = this.nextSpillLoc += 4;
+        VRToPR[VR] = -1;
+        PRToVR[PR] = -1;
+        PRNU[PR] = -1;
+        return PR;
+    }
+
+    /**
+     * Spills the next operation into memory because there aren't enough physical registers
+     * @param vrNum the virtual register number to restore
+     * @param current the current node that the iteration is on
+     * @return the pr that was assigned during the restore
+     */
+    private int Restore(int vrNum, IntRepList.OpNode current) {
+        /*
+         * Opcode Array representation:
+         *
+         * OPCODE       Argument 1          Argument 2          Argument 3
+         *             SR VR PR NU         SR VR PR NU         SR VR PR NU
+         *   0         1  2  3  4          5  6  7  8          9  10 11 12
+         *
+         */
+
+        int pr = getPR(current);
+
+        Integer[] loadIOPArray = new Integer[13];
+        loadIOPArray[0] = 1; // 'loadI' opcode
+        loadIOPArray[1] = VRToSpillLoc[vrNum]; // set the memory spill location
+        loadIOPArray[11] = this.numPhysRegs - 1; // the reserved PR for spill purposes
+        IntRepList.OpNode loadINode = new IntRepList.OpNode(loadIOPArray);
+
+        this.InsertAt(loadINode, current);
+
+        Integer[] loadOPArray = new Integer[13];
+        loadOPArray[0] = 0; // 'load' opcode
+        loadOPArray[3] = this.numPhysRegs - 1; // reserved pr
+        loadOPArray[11] = pr;
+        IntRepList.OpNode loadNode = new IntRepList.OpNode(loadOPArray);
+
+        this.InsertAt(loadNode, current);
+
+        VRToPR[vrNum] = pr;
+        PRToVR[pr] = vrNum;
+        VRToSpillLoc[vrNum] = -1; // has no spill location anymore
+
+        return pr;
+    }
     /**
      * Gets the PR with the furthest next use
      * @return the pr number
@@ -232,17 +247,13 @@ public class RAllocator {
     private int getPRFurthestUse() {
         int max = -1;
         int maxPR = -1;
-        for (int i = 0; i < PRNU.length; i++) {
+        for (int i = 0; i < numPhysRegs - 1; i++) {
             if (PRNU[i] > max) {
                 max = PRNU[i];
                 maxPR = i;
             }
         }
         return maxPR; // no free physical register
-    }
-
-    private boolean isSpilled(int vrNum) {
-        return VRToSpillLoc[vrNum] != -1;
     }
 
     /**

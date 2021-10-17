@@ -27,6 +27,7 @@ public class ILOCAllocMain {
             parser = new ILOCParser(filePath, false, false);
             renamer = new IRRenamer(parser.ParseGetIRep(), parser.getMaxSRNum());
             renamer.Rename();
+            System.out.println(renamer.getMaxVRegNum());
             renamer.PrintRenamedBlock();
         }
         else {
@@ -39,7 +40,7 @@ public class ILOCAllocMain {
             //renamer.PrintRenamedBlock();
             allocator = new RAllocator(iRep, Integer.parseInt(args[0]), renamer.getMaxVRegNum());
             allocator.Allocate();
-            allocator.ShowAllRep();
+            //allocator.ShowAllRep();
             allocator.PrintRenamedBlock();
         }
 

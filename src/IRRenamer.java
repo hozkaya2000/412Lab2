@@ -98,7 +98,6 @@ public class IRRenamer {
             index --;
         }
         maxVRegNum = VRName;
-        System.out.println(maxVRegNum);
     }
 
 
